@@ -7,6 +7,7 @@ import docx
 import pandas as pd
 from typing import List, Dict, Any
 import json
+import tiktoken
 
 # Page configuration
 st.set_page_config(
@@ -14,6 +15,12 @@ st.set_page_config(
     page_icon="📄",
     layout="wide"
 )
+
+# Constants
+MAX_FILE_SIZE_MB = 10  # Maximum file size in MB
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+MAX_TOKENS = 8000  # Max tokens to send to GPT-4 (leaving room for response)
+MAX_CHARS = 30000  # Approximate character limit for text
 
 def extract_text_from_pdf(pdf_file):
     """Extract text from PDF file"""
@@ -48,10 +55,43 @@ def extract_text_from_txt(txt_file):
         st.error(f"Error reading TXT: {str(e)}")
         return None
 
+def estimate_tokens(text: str, model: str = "gpt-4") -> int:
+    """Estimate the number of tokens in a text string"""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+        return len(encoding.encode(text))
+    except:
+        # Fallback to rough estimate if tiktoken fails
+        return len(text) // 4
+
+def truncate_text_for_analysis(text: str, max_chars: int = MAX_CHARS) -> tuple[str, bool]:
+    """Truncate text if it's too long, returns (truncated_text, was_truncated)"""
+    if len(text) <= max_chars:
+        return text, False
+    
+    # Try to truncate at a sentence boundary
+    truncated = text[:max_chars]
+    last_period = truncated.rfind('.')
+    last_newline = truncated.rfind('\n')
+    
+    # Use the latest sentence or paragraph boundary
+    boundary = max(last_period, last_newline)
+    if boundary > max_chars * 0.8:  # Only use boundary if it's not too far back
+        truncated = truncated[:boundary + 1]
+    
+    return truncated, True
+
 def analyze_document_quality(client: OpenAI, document_text: str, qa_criteria: List[str]) -> Dict[str, Any]:
     """Analyze document quality using OpenAI"""
     
+    # Truncate document if it's too long
+    truncated_text, was_truncated = truncate_text_for_analysis(document_text)
+    
     criteria_text = "\n".join([f"- {criterion}" for criterion in qa_criteria])
+    
+    truncation_notice = ""
+    if was_truncated:
+        truncation_notice = "\n\nNOTE: This document was truncated for analysis due to size constraints. The analysis is based on the first portion of the document."
     
     prompt = f"""
     You are a document quality control specialist. Please analyze the following document against these quality assurance criteria:
@@ -60,7 +100,7 @@ def analyze_document_quality(client: OpenAI, document_text: str, qa_criteria: Li
     {criteria_text}
 
     Document Text:
-    {document_text}
+    {truncated_text}{truncation_notice}
 
     Please provide a comprehensive quality analysis in JSON format with the following structure:
     {{
@@ -86,20 +126,37 @@ def analyze_document_quality(client: OpenAI, document_text: str, qa_criteria: Li
     """
 
     try:
+        # Check token count before sending
+        estimated_tokens = estimate_tokens(prompt)
+        if estimated_tokens > MAX_TOKENS:
+            st.warning(f"Document is very large. Using a condensed version for analysis.")
+        
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are an expert document quality analyst. Provide detailed, constructive feedback in valid JSON format."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3
+            temperature=0.3,
+            max_tokens=2000  # Limit response size
         )
         
         # Parse the JSON response
         analysis = json.loads(response.choices[0].message.content)
+        
+        # Add truncation warning to analysis if applicable
+        if was_truncated:
+            analysis['truncation_warning'] = "This analysis is based on a truncated version of the document due to size constraints."
+        
         return analysis
     except json.JSONDecodeError as e:
         st.error(f"Error parsing AI response: {str(e)}")
+        return None
+    except openai.BadRequestError as e:
+        if "maximum context length" in str(e):
+            st.error("Document is too large for analysis. Please upload a smaller document or split it into sections.")
+        else:
+            st.error(f"OpenAI API error: {str(e)}")
         return None
     except Exception as e:
         st.error(f"Error analyzing document: {str(e)}")
@@ -107,6 +164,10 @@ def analyze_document_quality(client: OpenAI, document_text: str, qa_criteria: Li
 
 def display_analysis_results(analysis: Dict[str, Any]):
     """Display the analysis results in a user-friendly format"""
+    
+    # Show truncation warning if present
+    if 'truncation_warning' in analysis:
+        st.warning(f"⚠️ {analysis['truncation_warning']}")
     
     # Overall Score
     col1, col2 = st.columns([1, 3])
@@ -199,22 +260,31 @@ def main():
     
     with col1:
         st.subheader("📤 Upload Document")
+        
+        # File size limit info
+        st.info(f"ℹ️ Maximum file size: {MAX_FILE_SIZE_MB} MB")
+        
         uploaded_file = st.file_uploader(
             "Choose a document file",
             type=['pdf', 'docx', 'txt'],
-            help="Upload PDF, DOCX, or TXT files for quality analysis"
+            help=f"Upload PDF, DOCX, or TXT files for quality analysis (max {MAX_FILE_SIZE_MB} MB)"
         )
         
         if uploaded_file:
-            st.success(f"File uploaded: {uploaded_file.name}")
-            
-            # Display file info
-            file_details = {
-                "Filename": uploaded_file.name,
-                "File size": f"{uploaded_file.size} bytes",
-                "File type": uploaded_file.type
-            }
-            st.json(file_details)
+            # Check file size
+            if uploaded_file.size > MAX_FILE_SIZE_BYTES:
+                st.error(f"❌ File size ({uploaded_file.size / 1024 / 1024:.1f} MB) exceeds the maximum allowed size of {MAX_FILE_SIZE_MB} MB. Please upload a smaller file.")
+                uploaded_file = None
+            else:
+                st.success(f"File uploaded: {uploaded_file.name}")
+                
+                # Display file info
+                file_details = {
+                    "Filename": uploaded_file.name,
+                    "File size": f"{uploaded_file.size / 1024:.1f} KB" if uploaded_file.size < 1024*1024 else f"{uploaded_file.size / 1024 / 1024:.1f} MB",
+                    "File type": uploaded_file.type
+                }
+                st.json(file_details)
     
     with col2:
         st.subheader("📝 Quality Assurance Criteria")
@@ -282,15 +352,26 @@ def main():
                     document_text = extract_text_from_txt(uploaded_file)
                 
                 if document_text:
-                    # Perform quality analysis
-                    analysis = analyze_document_quality(client, document_text, st.session_state.qa_criteria)
-                    
-                    if analysis:
-                        st.success("Analysis completed! 🎉")
-                        st.divider()
-                        display_analysis_results(analysis)
+                    # Check if document is empty
+                    if len(document_text.strip()) == 0:
+                        st.error("The document appears to be empty. Please upload a document with content.")
                     else:
-                        st.error("Failed to analyze document. Please try again.")
+                        # Show document size info
+                        doc_length = len(document_text)
+                        st.info(f"📊 Document length: {doc_length:,} characters")
+                        
+                        if doc_length > MAX_CHARS:
+                            st.warning(f"⚠️ Document exceeds {MAX_CHARS:,} characters. It will be truncated for analysis.")
+                        
+                        # Perform quality analysis
+                        analysis = analyze_document_quality(client, document_text, st.session_state.qa_criteria)
+                        
+                        if analysis:
+                            st.success("Analysis completed! 🎉")
+                            st.divider()
+                            display_analysis_results(analysis)
+                        else:
+                            st.error("Failed to analyze document. Please try again with a smaller document.")
                 else:
                     st.error("Failed to extract text from the document.")
     
