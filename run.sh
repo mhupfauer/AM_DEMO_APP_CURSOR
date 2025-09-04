@@ -4,6 +4,7 @@
 
 echo "🚀 Starting German Stock Market Tracker..."
 echo "📈 This application tracks German stocks with AI-powered analysis"
+echo "🔍 Now with web search integration for latest market news and updates!"
 echo ""
 
 # Check if streamlit is available

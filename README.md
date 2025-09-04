@@ -7,6 +7,7 @@ A comprehensive Streamlit application for tracking German stocks and ETFs with A
 - 📈 Real-time German stock market data (DAX companies and ETFs)
 - 📊 Interactive charts and visualizations using Plotly
 - 💬 AI-powered chat interface for data analysis
+- 🌐 Web search integration for latest news and market updates
 - 🔍 Performance comparison across multiple stocks
 - 📋 Detailed stock information and metrics
 - ⚡ Cached data fetching for improved performance
@@ -85,12 +86,16 @@ To use the chat features, you'll need an OpenAI API key:
 - Analyze market trends
 - Compare different stocks
 - Understand market movements
+- Search for latest news and announcements
+- Access current market sentiment and analyst reports
+- Get real-time updates on earnings and forecasts
 
 ## Technical Details
 
 - **Data Source**: Yahoo Finance API via yfinance
 - **Visualization**: Plotly for interactive charts
 - **AI Backend**: OpenAI GPT-3.5-turbo
+- **Web Search**: DuckDuckGo Search API
 - **Caching**: Streamlit's built-in caching for performance
 - **UI Framework**: Streamlit with responsive design
 
@@ -101,6 +106,11 @@ To use the chat features, you'll need an OpenAI API key:
 - "Should I be concerned about the recent drop in BMW stock?"
 - "Compare the performance of automotive stocks"
 - "What factors might be affecting Siemens' stock price?"
+- "What are the latest news about BMW?"
+- "Show me recent analyst predictions for SAP"
+- "What are the current market forecasts for German stocks?"
+- "Any recent earnings announcements from Siemens?"
+- "What's the current market sentiment on Deutsche Telekom?"
 
 ## Requirements
 
