@@ -8,6 +8,7 @@ import openai
 import json
 from typing import List, Dict, Any
 import numpy as np
+from duckduckgo_search import DDGS
 
 # Page configuration
 st.set_page_config(
@@ -95,32 +96,68 @@ class ChatInterface:
             self.client = openai.OpenAI(api_key=api_key)
         else:
             self.client = None
+        self.ddgs = DDGS()
     
     def analyze_stock_data(self, stock_data: Dict[str, Any], user_question: str) -> str:
-        """Analyze stock data using OpenAI"""
+        """Analyze stock data using OpenAI with web search capabilities"""
         if not self.client:
             return "Please provide an OpenAI API key to use the chat feature."
         
         # Prepare data summary for the AI
         data_summary = self._prepare_data_summary(stock_data)
         
-        system_prompt = """You are a financial analyst AI assistant specializing in German stock market data. 
-        You have access to real-time stock data and can provide insights, analysis, and answer questions about:
-        - Stock prices and performance
-        - Market trends
-        - Company information
-        - Investment recommendations (educational purposes only)
+        # Check if web search is needed
+        web_search_results = ""
+        if self._should_search_web(user_question):
+            # Extract relevant stock symbols from the question and data
+            symbols_in_question = []
+            for symbol, data in stock_data.items():
+                name = data.get('name', '').lower()
+                if symbol.lower() in user_question.lower() or any(word in user_question.lower() for word in name.split()):
+                    symbols_in_question.append((symbol, data.get('name', symbol)))
+            
+            # Perform web searches
+            search_queries = []
+            if symbols_in_question:
+                # Search for specific companies mentioned
+                for symbol, name in symbols_in_question:
+                    search_queries.append(f"{name} stock news latest {datetime.now().strftime('%Y-%m')}")
+            else:
+                # General search based on the question
+                search_queries.append(f"German stock market {user_question} {datetime.now().strftime('%Y-%m')}")
+            
+            all_search_results = []
+            for query in search_queries[:2]:  # Limit to 2 searches to avoid too many results
+                results = self._search_web(query, num_results=3)
+                all_search_results.extend(results)
+            
+            if all_search_results:
+                web_search_results = "\n\nRecent web search results:\n"
+                for i, result in enumerate(all_search_results[:5], 1):  # Limit to 5 total results
+                    web_search_results += f"\n{i}. {result['title']}\n   {result['snippet']}\n   Source: {result['url']}\n"
         
-        Always base your responses on the provided data and be clear about limitations.
-        Provide actionable insights when possible."""
+        system_prompt = """You are a financial analyst AI assistant specializing in German stock market data. 
+        You have access to real-time stock data and can search the web for current information.
+        
+        Your capabilities include:
+        - Analyzing stock prices and performance
+        - Searching for and incorporating latest market news and updates
+        - Providing insights on market trends and company information
+        - Offering educational investment analysis (not financial advice)
+        
+        When web search results are provided, use them to give current, up-to-date information.
+        Always distinguish between the real-time stock data provided and information from web searches.
+        Be clear about your sources and any limitations."""
         
         user_prompt = f"""
         Current German stock market data:
         {data_summary}
+        {web_search_results}
         
         User question: {user_question}
         
-        Please provide a comprehensive analysis based on this data.
+        Please provide a comprehensive analysis based on this data. If web search results are included, 
+        incorporate relevant current information from them in your response.
         """
         
         try:
@@ -151,6 +188,39 @@ class ChatInterface:
                 )
         
         return "\n".join(summary_parts)
+    
+    def _search_web(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
+        """Search the web for current information"""
+        try:
+            results = []
+            search_results = self.ddgs.text(query, max_results=num_results)
+            
+            for result in search_results:
+                results.append({
+                    'title': result.get('title', ''),
+                    'snippet': result.get('body', ''),
+                    'url': result.get('href', '')
+                })
+            
+            return results
+        except Exception as e:
+            st.warning(f"Web search error: {str(e)}")
+            return []
+    
+    def _should_search_web(self, question: str) -> bool:
+        """Determine if web search is needed based on the question"""
+        # Keywords that indicate need for current/live data
+        search_keywords = [
+            'latest', 'current', 'today', 'recent', 'news', 'announcement',
+            'breaking', 'update', 'forecast', 'prediction', 'analyst',
+            'earnings', 'report', 'merger', 'acquisition', 'dividend',
+            'market sentiment', 'economic', 'inflation', 'interest rate',
+            'policy', 'regulation', 'competitor', 'industry', 'sector',
+            'trend', 'outlook', 'guidance', 'estimate', 'rating'
+        ]
+        
+        question_lower = question.lower()
+        return any(keyword in question_lower for keyword in search_keywords)
 
 def create_price_chart(data: pd.DataFrame, title: str) -> go.Figure:
     """Create an interactive price chart"""
@@ -342,6 +412,7 @@ def main():
             """)
         else:
             st.success("Chat enabled! Ask questions about the stock data.")
+            st.info("🔍 **Web Search Enabled**: I can search for latest news, earnings reports, analyst predictions, and current market information!")
             
             # Chat interface
             if "messages" not in st.session_state:
@@ -353,7 +424,7 @@ def main():
                     st.markdown(message["content"])
             
             # Chat input
-            if prompt := st.chat_input("Ask about the stock data..."):
+            if prompt := st.chat_input("Ask about stocks, latest news, or market trends..."):
                 # Add user message to chat history
                 st.session_state.messages.append({"role": "user", "content": prompt})
                 with st.chat_message("user"):
@@ -380,7 +451,11 @@ def main():
     # Footer
     st.markdown("---")
     st.markdown(
-        "💡 **Tips**: Select stocks from the sidebar, choose a time period, and ask the AI assistant questions about trends, performance, or investment insights!"
+        "💡 **Tips**: Select stocks from the sidebar, choose a time period, and ask the AI assistant questions about:\n"
+        "- Current stock performance and trends\n"
+        "- Latest news and market updates\n"
+        "- Earnings reports and analyst predictions\n"
+        "- Economic indicators and market sentiment"
     )
 
 if __name__ == "__main__":
