@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nachrichten Kategorisierer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .api-key-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 4px solid #3498db;
+        }
+
+        .api-key-section h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .api-key-section h3::before {
+            content: "🔑";
+            margin-right: 10px;
+        }
+
+        .api-key-input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .api-key-input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .drop-zone {
+            border: 3px dashed #3498db;
+            border-radius: 15px;
+            padding: 60px 30px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            border-color: #2980b9;
+            background: #e8f4fd;
+            transform: translateY(-2px);
+        }
+
+        .drop-zone-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            color: #3498db;
+        }
+
+        .upload-text {
+            font-size: 1.2rem;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .upload-subtext {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .selected-files {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .file-item {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            color: #7f8c8d;
+            font-size: 0.85rem;
+        }
+
+        .remove-file {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .remove-file:hover {
+            background: #c0392b;
+        }
+
+        .categorize-btn {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 20px;
+        }
+
+        .categorize-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+
+        .categorize-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .result-item {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .file-name-result {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+
+        .category-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .category-reporting {
+            background: #e8f5e8;
+            color: #27ae60;
+            border: 1px solid #27ae60;
+        }
+
+        .category-steuer {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffc107;
+        }
+
+        .confidence-bar {
+            background: #e1e8ed;
+            height: 6px;
+            border-radius: 3px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e74c3c 0%, #f39c12 50%, #27ae60 100%);
+            transition: width 0.3s ease;
+        }
+
+        .confidence-text {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+        }
+
+        .content-preview {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #2c3e50;
+            border-left: 3px solid #3498db;
+            white-space: pre-wrap;
+        }
+
+        .error {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .main-content {
+                padding: 20px;
+            }
+
+            .drop-zone {
+                padding: 40px 20px;
+            }
+
+            .result-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Nachrichten Kategorisierer</h1>
+            <p>Automatische Kategorisierung von .msg Dateien in "Reporting anfragen" und "Steuer anfragen"</p>
+        </div>
+
+        <div class="main-content">
+            <div class="api-key-section">
+                <h3>OpenAI API Key</h3>
+                <input 
+                    type="password" 
+                    id="apiKey" 
+                    class="api-key-input" 
+                    placeholder="Geben Sie Ihren OpenAI API Key ein..."
+                    autocomplete="off"
+                >
+            </div>
+
+            <div class="upload-section">
+                <div class="drop-zone" id="dropZone">
+                    <input type="file" id="fileInput" class="file-input" multiple accept=".msg">
+                    <div class="drop-zone-content">
+                        <div class="upload-icon">📧</div>
+                        <div class="upload-text">Dateien hier hinziehen oder klicken zum Auswählen</div>
+                        <div class="upload-subtext">Nur .msg Dateien werden unterstützt</div>
+                    </div>
+                </div>
+
+                <div id="selectedFiles" class="selected-files"></div>
+
+                <button id="categorizeBtn" class="categorize-btn" disabled>
+                    Nachrichten kategorisieren
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <p>Kategorisiere Nachrichten...</p>
+            </div>
+
+            <div id="results" class="results"></div>
+            <div id="error" class="error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const selectedFiles = document.getElementById('selectedFiles');
+        const categorizeBtn = document.getElementById('categorizeBtn');
+        const apiKeyInput = document.getElementById('apiKey');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const errorDiv = document.getElementById('error');
+
+        let files = [];
+
+        // Drag and drop functionality
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', handleDragOver);
+        dropZone.addEventListener('dragleave', handleDragLeave);
+        dropZone.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileSelect);
+        categorizeBtn.addEventListener('click', categorizeMessages);
+        apiKeyInput.addEventListener('input', updateButtonState);
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const droppedFiles = Array.from(e.dataTransfer.files);
+            addFiles(droppedFiles);
+        }
+
+        function handleFileSelect(e) {
+            const selectedFiles = Array.from(e.target.files);
+            addFiles(selectedFiles);
+        }
+
+        function addFiles(newFiles) {
+            const msgFiles = newFiles.filter(file => file.name.toLowerCase().endsWith('.msg'));
+            
+            if (msgFiles.length !== newFiles.length) {
+                showError('Nur .msg Dateien werden unterstützt.');
+                return;
+            }
+
+            files = [...files, ...msgFiles];
+            updateFilesList();
+            updateButtonState();
+            hideError();
+        }
+
+        function removeFile(index) {
+            files.splice(index, 1);
+            updateFilesList();
+            updateButtonState();
+        }
+
+        function updateFilesList() {
+            if (files.length === 0) {
+                selectedFiles.innerHTML = '';
+                return;
+            }
+
+            selectedFiles.innerHTML = files.map((file, index) => `
+                <div class="file-item">
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
+                    </div>
+                    <button class="remove-file" onclick="removeFile(${index})">×</button>
+                </div>
+            `).join('');
+        }
+
+        function updateButtonState() {
+            const hasFiles = files.length > 0;
+            const hasApiKey = apiKeyInput.value.trim().length > 0;
+            categorizeBtn.disabled = !hasFiles || !hasApiKey;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function categorizeMessages() {
+            if (files.length === 0 || !apiKeyInput.value.trim()) {
+                showError('Bitte wählen Sie Dateien aus und geben Sie einen API Key ein.');
+                return;
+            }
+
+            loading.style.display = 'block';
+            results.innerHTML = '';
+            categorizeBtn.disabled = true;
+            hideError();
+
+            const formData = new FormData();
+            formData.append('api_key', apiKeyInput.value.trim());
+            
+            files.forEach(file => {
+                formData.append('files', file);
+            });
+
+            try {
+                const response = await fetch('/categorize', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Fehler beim Kategorisieren der Nachrichten');
+                }
+
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                showError(`Fehler: ${error.message}`);
+            } finally {
+                loading.style.display = 'none';
+                categorizeBtn.disabled = false;
+                updateButtonState();
+            }
+        }
+
+        function displayResults(data) {
+            results.innerHTML = data.map(result => {
+                const categoryClass = result.category.toLowerCase().includes('reporting') ? 'category-reporting' : 'category-steuer';
+                const confidencePercent = Math.round(result.confidence * 100);
+                
+                return `
+                    <div class="result-item">
+                        <div class="result-header">
+                            <div class="file-name-result">${result.filename}</div>
+                            <div class="category-badge ${categoryClass}">
+                                ${result.category}
+                            </div>
+                        </div>
+                        <div class="confidence-text">Vertrauen: ${confidencePercent}%</div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${confidencePercent}%"></div>
+                        </div>
+                        <div class="content-preview">${result.content_preview}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            errorDiv.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
